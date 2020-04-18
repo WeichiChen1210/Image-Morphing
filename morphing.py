@@ -3,48 +3,45 @@ import numpy as np
 import math
 import sys
 from argparse import ArgumentParser
+import time
 
 # line structure, store its start point and end point
 class Line(object):
     def __init__(self, start_point, end_point):
-        self.start_point = start_point
+        self.start_point = start_point  # both points are stored as np.array
         self.end_point = end_point
-    
-    def get_vector(self):   # return vector
-        return self.end_point - self.start_point
 
-    def get_perpendicular(self):    # return perpendicular vector
-        vector = self.get_vector()
-        return np.array([vector[1], -vector[0]])
+        self.vector = self.end_point - self.start_point
+        self.perpendicular = np.array([self.vector[1], -self.vector[0]])
 
-    def get_length(self):   # calculate the length of the vector
-        vector = self.get_vector()
-        length = np.sum(np.square(vector))
-        return length
+        self.length = np.sum(np.square(self.vector))
+        self.sqrt_len = np.sqrt(self.length)
     
     def print_content(self):    # for debugging
-        vector = self.get_vector()
-        perpen = self.get_perpendicular()
-        print('start {} end {} vector {} perpen {}'.format(self.start_point, self.end_point, vector, perpen))
+        print('start {} end {} vector {} perpen {}'.format(self.start_point, self.end_point, self.vector, self.perpendicular))
 
 # mouse event call back function
 def get_feature_line(event, x, y, flags, param):
+    img = param[0]
+    point_list = param[1]
+    line_list = param[2]
     if event == cv2.EVENT_LBUTTONDOWN:
-        cv2.circle(param[0], (x, y), 2, (0, 0, 255), thickness=-3)
-        param[1].append(np.array([y, x]))   # store current point
+        cv2.circle(img, (x, y), 2, (0, 0, 255), thickness=-3)
+        point_list.append(np.array([y, x]))   # store current point
 
         if len(param[1]) % 2 == 0:  # if 2 points, make a line
-            cv2.line(param[0], (param[1][-2][1], param[1][-2][0]), (x, y), (0, 0, 255), 2)
-            line = Line(np.array(param[1][-2]), np.array([y, x]))   # create a line object and store it
-            param[2].append(line)
+            cv2.line(img, (point_list[-2][1], point_list[-2][0]), (x, y), (0, 0, 255), 2)
+            line = Line(np.array(point_list[-2]), np.array([y, x]))   # create a line object and store it
+            line_list.append(line)
 
 # calculate line interpolation for given ratio
 def lineInterpolate(src_lines, dst_lines, ratio):
     inter_vectors = []
     for i in range(len(src_lines)):
         # interpolate of start_point and point
-        start_point = (1 - ratio) * src_lines[i].start_point + ratio * dst_lines[i].start_point
-        end_point = (1 - ratio) * src_lines[i].end_point + ratio * dst_lines[i].end_point
+        src, dst = src_lines[i], dst_lines[i]
+        start_point = (1 - ratio) * src.start_point + ratio * dst.start_point
+        end_point = (1 - ratio) * src.end_point + ratio * dst.end_point
         # create line object to store
         inter_line = Line(start_point, end_point)
         inter_vectors.append(inter_line)
@@ -53,34 +50,34 @@ def lineInterpolate(src_lines, dst_lines, ratio):
 
 # map the P in destination image to source image
 def mapping(cur_point, src_vector, inter_vector, p=0, a=1, b=2):
-    src_perpen = src_vector.get_perpendicular() # perpendicular vector
-    inter_perpen = inter_vector.get_perpendicular()
+    src_perpen = src_vector.perpendicular # perpendicular vector
+    PQ_perpen = inter_vector.perpendicular
     inter_start_point = inter_vector.start_point
 
     PX = cur_point - inter_start_point  # PX vector
-    PQ = inter_vector.get_vector()      # PQ vector, destination vector
+    PQ = inter_vector.vector      # PQ vector, destination vector
 
-    inter_len = inter_vector.get_length()   # len of destination vector
+    inter_len = inter_vector.length   # len of destination vector
 
     u = np.inner(PX, PQ) / inter_len    # calculate u and v
-    v = np.inner(PX, inter_perpen) / np.sqrt(inter_len)
+    v = np.inner(PX, PQ_perpen) / inter_vector.sqrt_len
     
-    PQt = src_vector.get_vector()       # PQ vector in src img
-    src_len = np.sqrt(src_vector.get_length())  # its length
+    PQt = src_vector.vector       # PQ vector in src img
+    src_len = src_vector.sqrt_len  # its length
     xt = src_vector.start_point + u * PQt + v * src_perpen / src_len    # Xt point
 
     # calculate the distance from Xt to PQ vector in src img depend on u
     dist = 0
     if u < 0:
-        dist = np.sqrt(np.sum(np.square(xt - inter_start_point)))
+        dist = np.sqrt(np.sum(np.square(xt - src_vector.start_point)))
     elif u > 1: 
-        dist = np.sqrt(np.sum(np.square(xt - inter_vector.end_point)))
+        dist = np.sqrt(np.sum(np.square(xt - src_vector.end_point)))
     else:
         dist = abs(v)
     
     # calculate weight of this point
     weight = 0
-    length = pow(inter_vector.get_length(), p)
+    length = pow(inter_vector.sqrt_len, p)
     weight = pow((length / (a + dist)), b)
 
     return xt, weight
@@ -127,8 +124,7 @@ def warpImg(img , src_vectors, inter_vectors, p=0, a=1, b=2):
                 point[1] = w - 1
             
             warp_img[i, j] = bilinear(img, point, h, w) # calulate the color by bilinear
-    return warp_img
-    
+    return warp_img    
 
 if __name__ == '__main__':
     # argument parser
@@ -143,7 +139,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     src_path, dst_path = args.src, args.dst
     p, a, b, frames = args.p, args.a, args.b, args.frames
-    
     src_points = []
     dst_points = []
     src_lines = []
@@ -176,7 +171,8 @@ if __name__ == '__main__':
     if len(src_lines) != len(dst_lines):
         print("Control lines do not match!")
         sys.exit()
-    
+    print('{} pairs of feature vectors'.format(len(src_lines)))
+
     animation = []  # save images for animation
     for i in range(frames):
         t = i / (frames - 1)
@@ -184,11 +180,11 @@ if __name__ == '__main__':
 
         # get vectors of line interpolation between src and dst lines for given t
         inter_vectors = lineInterpolate(src_lines, dst_lines, t)
-
+        
         # get warp images
         src_warp = warpImg(src_origin, src_lines, inter_vectors, p, a, b)
         dst_warp = warpImg(dst_origin, dst_lines, inter_vectors, p, a, b)
-
+        
         # dissolving
         img = np.empty_like(src_origin)
         for i in range(h):
@@ -199,6 +195,6 @@ if __name__ == '__main__':
     # play animation
     for img in animation:
         cv2.imshow('Animation', img)
-        cv2.waitKey(500)
+        cv2.waitKey(300)
     
     cv2.destroyAllWindows()
