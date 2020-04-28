@@ -187,9 +187,9 @@ if __name__ == '__main__':
         
         # dissolving
         img = np.empty_like(src_origin)
-        for i in range(h):
-            for j in range(w):
-                img[i, j] = (1 - t) * src_warp[i, j] + t * dst_warp[i, j]
+        for j in range(h):
+            for k in range(w):
+                img[j, k] = (1 - t) * src_warp[j, k] + t * dst_warp[j, k]
         animation.append(img)
     
     # play animation
