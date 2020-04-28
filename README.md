@@ -29,11 +29,11 @@ Several argument that can be adjusted:
 + ``` -f=[int]```: Number of frames to build an animation
 ex:
 ```command
-$ ./parallel_morphing.cpp women.jpg cheetah.jpg
+$ ./parallel_morphing women.jpg cheetah.jpg
 ```
 or
 ```command
-$ ./parallel_morphing.cpp -f=51 women.jpg cheetah.jpg -p=1
+$ ./parallel_morphing -f=51 women.jpg cheetah.jpg -p=1
 ```
 
 ### Python
